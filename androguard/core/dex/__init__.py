@@ -56,6 +56,8 @@ VALUE_INT = 0x04  # size - 1 (0..3)  ubyte[size]    signed four-byte integer val
 VALUE_LONG = 0x06  # size - 1 (0..7)  ubyte[size]    signed eight-byte integer value, sign-extended
 VALUE_FLOAT = 0x10  # size - 1 (0..3)  ubyte[size]    four-byte bit pattern, zero-extended to the right, and interpreted as an IEEE754 32-bit floating point value
 VALUE_DOUBLE = 0x11  # size - 1 (0..7)  ubyte[size]    eight-byte bit pattern, zero-extended to the right, and interpreted as an IEEE754 64-bit floating point value
+VALUE_METHOD_TYPE = 0x15 # size -1 (0...3) ubyte[size]    unsigned (zero-extended) four-byte integer value, interpreted as an index into the proto_ids section and representing a method type value 
+VALUE_METHOD_HANDLE = 0x16 # size -1 (0...3) ubyte[size]    unsigned (zero-extended) four-byte integer value, interpreted as an index into the method_handles section and representing a method handle value 
 VALUE_STRING = 0x17  # size - 1 (0..3)  ubyte[size]    unsigned (zero-extended) four-byte integer value, interpreted as an index into the string_ids section and representing a string value
 VALUE_TYPE = 0x18  # size - 1 (0..3)  ubyte[size]    unsigned (zero-extended) four-byte integer value, interpreted as an index into the type_ids section and representing a reflective type/class value
 VALUE_FIELD = 0x19  # size - 1 (0..3)  ubyte[size]    unsigned (zero-extended) four-byte integer value, interpreted as an index into the field_ids section and representing a reflective field value
@@ -495,6 +497,31 @@ class HeaderItem:
 
         # Q is actually wrong, but we do not change it here and unpack our own
         # stuff...
+
+        # https://source.android.com/docs/core/runtime/dex-format 
+        # 8s = 8 dex magic bytes
+        # I = 4 byte checksum
+        # 20s = 20 byte signature
+        # 20I = 80 bytes:
+        #   = 4 byte endian tag +
+        #   = 4 byte link size +
+        #   = 4 byte link off +
+        #   = 4 byte map off +
+        #   = 4 byte string ids size +
+        #   = 4 byte string ids off +
+        #   = 4 byte type ids size +
+        #   = 4 byte type ids off +
+        #   = 4 byte proto ids size +
+        #   = 4 byte proto ids off +
+        #   = 4 byte field ids size +
+        #   = 4 byte field ids off +
+        #   = 4 byte method ids size +
+        #   = 4 byte method ids off +
+        #   = 4 byte class defs size +
+        #   = 4 byte class defs off +
+        #   = 4 byte data size +
+        #   = 4 byte data off 
+
         self.magic, \
         self.checksum, \
         self.signature, \
@@ -518,6 +545,12 @@ class HeaderItem:
         self.class_defs_off, \
         self.data_size, \
         self.data_off = cm.packer['8sI20s20I'].unpack(buff.read(112))
+
+        # 8s = 8
+        # I  = 4
+        # 20s = 20
+        # 20I = 80
+        # = 112
 
         # possible dex or dey:
         if self.magic[:2] != b'de' or self.magic[2] not in [0x78, 0x79] or self.magic[3] != 0x0a or self.magic[7] != 0x00:
@@ -703,6 +736,7 @@ class AnnotationOffItem:
     """
 
     def __init__(self, buff: BinaryIO, cm: ClassManager) -> None:
+        # logger.info("new AnnotationOffItem")
         self.CM = cm
         self.annotation_off, = cm.packer["I"].unpack(buff.read(4))
 
@@ -726,7 +760,7 @@ class AnnotationOffItem:
     def get_length(self) -> int:
         return len(self.get_obj())
 
-    def get_annotation_item(self) -> list[AnnotationItem]:
+    def get_annotation_item(self) -> AnnotationItem:
         return self.CM.get_annotation_item(self.get_annotation_off())
 
 
@@ -743,8 +777,11 @@ class AnnotationSetItem:
     def __init__(self, buff: BinaryIO, cm:ClassManager) -> None:
         self.CM = cm
         self.offset = buff.tell()
+        # logger.info(f"self.offset = {hex(self.offset)}")
 
         self.size, = cm.packer["I"].unpack(buff.read(4))
+        # logger.info(f"self.size = {self.size}")
+        # sys.exit()
         self.annotation_off_item = [AnnotationOffItem(buff, cm) for _ in range(self.size)]
 
     def get_annotation_off_item(self) -> list[AnnotationOffItem]:
@@ -1669,34 +1706,47 @@ class EncodedValue:
         if VALUE_SHORT <= self.value_type < VALUE_STRING:
             self.value, self.raw_value = self._getintvalue(buff.read(
                 self.value_arg + 1))
-        elif self.value_type == VALUE_STRING:
-            id, self.raw_value = self._getintvalue(buff.read(self.value_arg +
-                                                             1))
-            self.value = cm.get_raw_string(id)
-        elif self.value_type == VALUE_TYPE:
-            id, self.raw_value = self._getintvalue(buff.read(self.value_arg +
-                                                             1))
-            self.value = cm.get_type(id)
-        elif self.value_type == VALUE_FIELD:
-            id, self.raw_value = self._getintvalue(buff.read(self.value_arg +
-                                                             1))
-            self.value = cm.get_field(id)
-        elif self.value_type == VALUE_METHOD:
-            id, self.raw_value = self._getintvalue(buff.read(self.value_arg +
-                                                             1))
+            
+        elif self.value_type == VALUE_METHOD_TYPE:
+            id, self.raw_value = self._getintvalue(buff.read(self.value_arg +1))
+            self.value = cm.get_proto(id)
+
+        elif self.value_type == VALUE_METHOD_HANDLE:
+            id, self.raw_value = self._getintvalue(buff.read(self.value_arg + 1))
             self.value = cm.get_method(id)
-        elif self.value_type == VALUE_ENUM:
-            id, self.raw_value = self._getintvalue(buff.read(self.value_arg +
-                                                             1))
+
+        elif self.value_type == VALUE_STRING:
+            id, self.raw_value = self._getintvalue(buff.read(self.value_arg + 1))
+            self.value = cm.get_raw_string(id)
+
+        elif self.value_type == VALUE_TYPE:
+            id, self.raw_value = self._getintvalue(buff.read(self.value_arg + 1))
+            self.value = cm.get_type(id)
+
+        elif self.value_type == VALUE_FIELD:
+            id, self.raw_value = self._getintvalue(buff.read(self.value_arg + 1))
             self.value = cm.get_field(id)
+
+        elif self.value_type == VALUE_METHOD:
+            id, self.raw_value = self._getintvalue(buff.read(self.value_arg + 1))
+            self.value = cm.get_method(id)
+
+        elif self.value_type == VALUE_ENUM:
+            id, self.raw_value = self._getintvalue(buff.read(self.value_arg + 1))
+            self.value = cm.get_field(id)
+
         elif self.value_type == VALUE_ARRAY:
             self.value = EncodedArray(buff, cm)
+
         elif self.value_type == VALUE_ANNOTATION:
             self.value = EncodedAnnotation(buff, cm)
+
         elif self.value_type == VALUE_BYTE:
             self.value = get_byte(cm, buff)
+
         elif self.value_type == VALUE_NULL:
             self.value = None
+
         elif self.value_type == VALUE_BOOLEAN:
             if self.value_arg:
                 self.value = True
@@ -2685,7 +2735,6 @@ class MethodHIdItem:
             i.reload()
 
     def show(self) -> None:
-        print("METHOD_ID_ITEM")
         nb = 0
         for i in self.method_id_items:
             print(nb, end=' ')
@@ -3982,6 +4031,89 @@ class ClassHDefItem:
             length += i.get_length()
         return length
 
+class CallSiteIdItem:
+    """
+    This class can parse a call_site_id_item of a dex file
+
+    :param buff: a string which represents a Buff object of the call_site_id_item
+    :type buff: Buff object
+    :param cm: a ClassManager object
+    :type cm: :class:`ClassManager`
+    """
+    def __init__(self, buff: BinaryIO, cm:ClassManager) -> None:
+        self.CM = cm
+        self.offset = buff.tell()
+        self.call_site_off, = cm.packer["I"].unpack(buff.read(4))
+
+    def get_call_site_off(self) -> int:
+        return self.call_site_off
+
+    def show(self):
+        bytecode._PrintSubBanner("CallSiteIDItem Item")
+        bytecode._PrintDefault("call_site_off=0x%x\n" % self.call_site_off)
+
+    def get_obj(self) -> bytes:
+        if self.call_site_off != 0:
+            self.call_site_off = self.CM.get_obj_by_offset(
+                self.call_site_off).get_off()
+
+        return self.CM.packer["I"].pack(self.call_site_off)
+
+    def get_raw(self) -> bytes:
+        return self.get_obj()
+
+    def get_length(self) -> int:
+        return len(self.get_obj())
+
+    def get_call_site_item(self) -> EncodedArrayItem:
+        return self.CM.get_call_site_item(self.get_call_site_off())
+
+# class CallSiteItem:
+#     def __init__(self, buff: BinaryIO, cm:ClassManager) -> None:
+#         self.CM = cm
+#         self.offset = buff.tell()
+#         # self.call_site_off, = cm.packer["I"].unpack(buff.read(4))
+#         self.method_handle      # VALUE_METHOD_HANDLE
+#         self.method_name        # VALUE_STRING
+#         self.method_type        # VALUE_METHOD_TYPE
+# class CallSiteHIdItem:
+#     """
+#     This class can parse a list of call_site_id_item of a dex file
+
+#     :param buff: a string which represents a Buff object of the list of call_site_id_item
+#     :type buff: Buff object
+#     :param cm: a ClassManager object
+#     :type cm: :class:`ClassManager`
+#     """
+#     def __init__(self, buff: BinaryIO, cm:ClassManager) -> None:
+#         self.CM = cm
+#         self.offset = buff.tell()
+
+class MethodHandleIdItem:
+    """
+    This class can parse a method_handle_id_item of a dex file
+
+    :param buff: a string which represents a Buff object of the method_handle_id_item
+    :type buff: Buff object
+    :param cm: a ClassManager object
+    :type cm: :class:`ClassManager`
+    """
+    def __init__(self, buff: BinaryIO, cm:ClassManager) -> None:
+        self.CM = cm
+        self.offset = buff.tell()
+
+class MethodHandleHIdItem:
+    """
+    This class can parse a list of method_handle_id_item of a dex file
+
+    :param buff: a string which represents a Buff object of the list of method_handle_id_item
+    :type buff: Buff object
+    :param cm: a ClassManager object
+    :type cm: :class:`ClassManager`
+    """
+    def __init__(self, buff: BinaryIO, cm:ClassManager) -> None:
+        self.CM = cm
+        self.offset = buff.tell()
 
 class EncodedTypeAddrPair:
     """
@@ -7078,7 +7210,11 @@ class MapItem:
 
         elif TypeMapItem.ANNOTATION_SET_ITEM == self.type:
             # 4-byte aligned
+            logger.info(f"ANNOTATION_SET_ITEM offset: {hex(self.offset)}")
             buff.seek(self.offset + (self.offset % 4))
+            logger.info(f"ANNOTATION_SET_ITEM new offset: {hex(buff.tell())}")
+            logger.info(f"ANNOTATION_SET_ITEM size: {self.size}")
+
             self.item = [AnnotationSetItem(buff, cm) for _ in range(self.size)]
 
         elif TypeMapItem.ANNOTATIONS_DIRECTORY_ITEM == self.type:
@@ -7126,10 +7262,24 @@ class MapItem:
             buff.seek(self.offset + (self.offset % 4))
             pass  # It's me I think !!! No need to parse again
 
+        # elif TypeMapItem.CALL_SITE_ID_ITEM == self.type:
+        #     # 4-byte aligned
+        #     buff.seek(self.offset + (self.offset % 4))
+        #     # self.item = CallSiteHIdItem()
+        #     self.item = [CallSiteIdItem(buff, cm) for _ in range(self.size)]
+
+        # elif TypeMapItem.METHOD_HANDLE_ITEM == self.type:
+        #     # 4-byte aligned
+        #     buff.seek(self.offset + (self.offset % 4))
+        #     # self.item = MethodHandleHIdItem
+        #     self.item = [MethodHandleIdItem(buff, cm) for _ in range(self.size)]
+
         else:
-            logger.warning("Map item with id '{type}' offset: 0x{off:x} ({off}) "
+            # TODO: change back to warning and remove sys.exit()
+            logger.error("Map item with id '{type}' offset: 0x{off:x} ({off}) "
                         "size: {size} is unknown. "
                         "Is this a newer DEX format?".format(type=self.type, off=buff.tell(), size=self.size))
+            # sys.exit()
 
         diff = time.time() - started_at
         minutes, seconds = diff // 60, diff % 60
@@ -7301,6 +7451,11 @@ class ClassManager:
             if i.get_off() == off:
                 return i
 
+    # a call_site_item is an encoded_array_item with some specific values in the first 3 slots
+    # https://source.android.com/docs/core/runtime/dex-format#call-site-id-item
+    def get_call_site_item(self, off:int) -> CallSiteIdItem:
+        return self.get_encoded_array_item(off)
+
     def get_annotations_directory_item(self, off:int) -> AnnotationsDirectoryItem:
         for i in self.__manage_item[TypeMapItem.ANNOTATIONS_DIRECTORY_ITEM]:
             if i.get_off() == off:
@@ -7311,6 +7466,7 @@ class ClassManager:
             if i.get_off() == off:
                 return i
 
+    # TODO: this is certainly broken, there is no matching TypeMapItem defined for ANNOTATION_OFF_ITEM
     def get_annotation_off_item(self, off:int) -> AnnotationOffItem:
         for i in self.__manage_item[TypeMapItem.ANNOTATION_OFF_ITEM]:
             if i.get_off() == off:
