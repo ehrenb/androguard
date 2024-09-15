@@ -1869,31 +1869,33 @@
 <h2 id="setup">Setup<a class="headerlink" href="#setup" title="Permanent link">#</a></h2>
 <p>To begin contributing to Androguard:</p>
 <ol>
-<li>Clone Androguard</li>
-</ol>
+<li>
+<p>Clone Androguard:
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/androguard/androguard.git
-</code></pre></div>
-<ol>
-<li>Install <code>poetry</code></li>
-</ol>
+</code></pre></div></p>
+</li>
+<li>
+<p>Install <code>poetry</code>:
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>pip3<span class="w"> </span>install<span class="w"> </span>poetry
-</code></pre></div>
-<ol>
-<li>Install Androguard</li>
-</ol>
+</code></pre></div></p>
+</li>
+<li>
+<p>Install Androguard:
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>poetry<span class="w"> </span>install
-</code></pre></div>
-<ol>
-<li>Verify succesful installation by running the unit tests.  From the Androguard root directory:</li>
-</ol>
+</code></pre></div></p>
+</li>
+<li>
+<p>Verify succesful installation by running the unit tests.  From the Androguard root directory:
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>poetry<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-m<span class="w"> </span>unittest<span class="w"> </span>discover<span class="w"> </span>-s<span class="w"> </span>tests<span class="w"> </span>-p<span class="w"> </span><span class="s1">&#39;test_*.py&#39;</span>
-</code></pre></div>
-<ol>
-<li>Building docs (optional)</li>
-</ol>
+</code></pre></div></p>
+</li>
+<li>
+<p>Building docs (optional):
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nb">cd</span><span class="w"> </span>docs<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>pip3<span class="w"> </span>install<span class="w"> </span>-r<span class="w"> </span>requirements.docs.txt
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>mkdocs<span class="w"> </span>serve
-</code></pre></div>
+</code></pre></div></p>
+</li>
+</ol>
 <h2 id="standards">Standards<a class="headerlink" href="#standards" title="Permanent link">#</a></h2>
 <ul>
 <li>Functions and classes should include <a href="https://docs.python.org/3/library/typing.html">typing</a> annotations to help navigate and auto-document the code</li>
